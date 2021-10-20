@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css" />
+    <title>Realtime Rxjs</title>
+    <script src="https://unpkg.com/web-streams-polyfill/dist/polyfill.min.js"></script>
+    <script type="module">
+      import { render, html } from '//unpkg.com/lighterhtml?module'
+      import {
+        switchMap,
+        mergeMap,
+        from,
+        tap,
+        map,
+        takeUntil,
+        filter,
+        finalize,
+        fromEvent,
+        merge,
+        race,
+        ignoreElements,
+        timer,
+        EMPTY,
+        mapTo,
+      } from 'https://cdn.skypack.dev/rxjs'
+      import { fromFetch } from 'https://cdn.skypack.dev/rxjs/fetch'
+
+      const msgForm = document.getElementById('msg')
+      const chat = document.getElementById('chat')
+      const connectedIndicator = document.getElementById('connected-indicator')
+      const userField = document.getElementById('user')
+      const textField = document.getElementById('text')
+
+      async function getMsgs() {
+        // manual submit
+        const submit$ = fromEvent(msg, 'submit').pipe(
+          tap((e) => e.preventDefault()),
+          mergeMap(submitMessage)
+        )
+        // if user pauses for 1600 ms, auto-submit with ... appended
+        const autoSubmit$ = fromEvent(textField, 'keyup').pipe(
+          switchMap(() => {
+            return race(
+              timer(1600).pipe(mapTo('SUBMIT')),
+              fromEvent(textField, 'keydown'),
+              submit$
+            ).pipe(
+              switchMap((v) => (v === 'SUBMIT' ? submitMessage('...') : EMPTY)),
+              ignoreElements()
+            )
+          })
+        )
+        // get stream
+        const messages$ = fromFetch('/msgs')
+
+        // transform readable stream from backend into list of messages
+        const chat$ = messages$.pipe(
+          switchMap((res) => {
+            setConnection('connected')
+            return from(res.body)
+          }),
+          map((stream) => {
+            const utf8Decoder = new TextDecoder('utf-8')
+            return utf8Decoder.decode(stream)
+          }),
+          map((chunk) => JSON.parse(chunk)),
+          tap(renderMessages),
+          takeUntil(messages$.pipe(filter((res) => !!res.done))),
+          finalize(() => setConnection('disconnected'))
+        )
+
+        const mergedState$ = merge(chat$, submit$, autoSubmit$)
+        return mergedState$.subscribe()
+      }
+
+      getMsgs()
+
+      function submitMessage(appendToText = '') {
+        return fromFetch('/msgs', {
+          method: 'POST',
+          body: JSON.stringify({
+            text: msgForm.elements.text.value + appendToText,
+            user: msgForm.elements.user.value,
+          }),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }).pipe(
+          tap(() => {
+            msgForm.elements.text.value = ''
+            msgForm.focus()
+          })
+        )
+      }
+
+      function renderMessages(chatData) {
+        render(
+          chat,
+          html.node`
+        <ul>${chatData.msg.map(
+          ({ user, text, time, id }) => html.node`
+          <li>${user}: ${text}</li>
+        `
+        )}
+        </ul>
+      `
+        )
+      }
+
+      function setConnection(state) {
+        render(connectedIndicator, html`<p>Chat is ${state}!</p>`)
+      }
+    </script>
+    <style>
+      header {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Real-time with Rxjs</h1>
+      <div id="connected-indicator"></div>
+    </header>
+    <main>
+      <form id="msg">
+        <div>
+          <div>
+            <label for="user">User Name</label>
+            <input id="user" type="text" />
+          </div>
+          <div>
+            <label for="text">Message</label>
+            <input id="text" type="text" />
+          </div>
+        </div>
+        <div>
+          <button type="submit">Submit</button>
+        </div>
+      </form>
+      <section id="chat"></section>
+    </main>
+  </body>
+</html>

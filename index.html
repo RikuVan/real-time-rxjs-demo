@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css" />
+    <title>Realtime Rxjs</title>
+    <script src="https://unpkg.com/web-streams-polyfill/dist/polyfill.min.js"></script>
+    <script type="module">
+      import { render, html } from '//unpkg.com/lighterhtml?module'
+
+      const msg = document.getElementById('msg')
+      const chat = document.getElementById('chat')
+      const connectedIndicator = document.getElementById('connected-indicator')
+
+      msg.addEventListener('submit', function (e) {
+        e.preventDefault()
+        postNewMsg(msg.elements.user.value, msg.elements.text.value)
+        msg.elements.text.value = ''
+      })
+
+      let connected = 'disconnected'
+      let chatData = []
+
+      async function getMsgs() {
+        let reader
+        const utf8Decoder = new TextDecoder('utf-8')
+        try {
+          const res = await fetch('/msgs')
+          reader = res.body.getReader()
+          setConnection('connected')
+        } catch (e) {
+          console.log('connection error', e)
+        }
+
+        let response
+        let done
+        do {
+          try {
+            response = await reader.read()
+          } catch (e) {
+            setConnection('disconnected')
+            console.log(e)
+            return
+          }
+          const chunk = utf8Decoder.decode(response.value, { stream: true })
+          done = response.done
+          if (chunk) {
+            try {
+              const json = JSON.parse(chunk)
+              chatData = json.msg
+              renderMessages()
+            } catch (e) {
+              console.log('parse error', e)
+            }
+          }
+        } while (!done)
+        setConnection('disconnected')
+      }
+
+      getMsgs()
+
+      function renderMessages(chatData) {
+        render(
+          chat,
+          html.node`
+        <ul>${chatData.msg.map(
+          ({ user, text, time, id }) => html.node`
+          <li>${user}: ${text}</li>
+        `
+        )}
+        </ul>
+      `
+        )
+      }
+
+      function setConnection(state) {
+        render(connectedIndicator, html`<p>Chat is ${state}!</p>`)
+      }
+
+      async function postNewMsg(user, text) {
+        const data = {
+          user,
+          text,
+        }
+
+        const options = {
+          method: 'POST',
+          body: JSON.stringify(data),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+        await fetch('/msgs', options)
+      }
+    </script>
+    <style>
+      header {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Real-time with Rxjs</h1>
+      <div id="connected-indicator"></div>
+    </header>
+    <main>
+      <form id="msg">
+        <div>
+          <div>
+            <label for="user">User Name</label>
+            <input id="user" type="text" />
+          </div>
+          <div>
+            <label for="text">Message</label>
+            <input id="text" type="tel" />
+          </div>
+        </div>
+        <div>
+          <button type="submit">Submit</button>
+        </div>
+      </form>
+      <section id="chat"></section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,4 @@
+*.pem
+*.crt
+node_modules
+.history
