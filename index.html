@@ -10,18 +10,17 @@
     <script type="module">
       import { render, html } from '//unpkg.com/lighterhtml?module'
 
-      const msg = document.getElementById('msg')
+      const msgForm = document.getElementById('msg')
       const chat = document.getElementById('chat')
       const connectedIndicator = document.getElementById('connected-indicator')
 
-      msg.addEventListener('submit', function (e) {
+      msgForm.addEventListener('submit', function (e) {
         e.preventDefault()
-        postNewMsg(msg.elements.user.value, msg.elements.text.value)
-        msg.elements.text.value = ''
+        postNewMsg(msgForm.elements.user.value, msgForm.elements.text.value)
+        msgForm.elements.text.value = ''
       })
 
       let connected = 'disconnected'
-      let chatData = []
 
       async function getMsgs() {
         let reader
@@ -49,8 +48,7 @@
           if (chunk) {
             try {
               const json = JSON.parse(chunk)
-              chatData = json.msg
-              renderMessages()
+              renderMessages(json)
             } catch (e) {
               console.log('parse error', e)
             }
