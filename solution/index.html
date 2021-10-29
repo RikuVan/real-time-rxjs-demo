@@ -43,12 +43,10 @@
         // if user pauses for 1600 ms, auto-submit with ... appended
         const autoSubmit$ = fromEvent(textField, 'keyup').pipe(
           switchMap(() => {
-            return race(
-              timer(1600).pipe(mapTo('SUBMIT')),
-              fromEvent(textField, 'keydown'),
-              submit$
-            ).pipe(
-              switchMap((v) => (v === 'SUBMIT' ? submitMessage('...') : EMPTY)),
+            return race(fromEvent(textField, 'keydown'), timer(1600)).pipe(
+              switchMap((v) =>
+                typeof v === 'number' && textField.value.length ? doSubmit('...') : EMPTY
+              ),
               ignoreElements()
             )
           })

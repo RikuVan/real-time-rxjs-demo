@@ -2,3 +2,4 @@
 *.crt
 node_modules
 .history
+.idea/
